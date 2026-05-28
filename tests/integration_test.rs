@@ -5,7 +5,7 @@ use soroban_sdk::{
     token::{Client as TokenClient, StellarAssetClient},
     vec, Address, Env, IntoVal, Vec as SorobanVec,
 };
-use stellar_royalty_splitter::RoyaltySplitterClient;
+use stellar_royalty_splitter::{DataKey, RoyaltySplitterClient};
 
 fn setup(env: &Env) -> (Address, RoyaltySplitterClient) {
     let contract_id = env.register_contract(None, stellar_royalty_splitter::RoyaltySplitter);
@@ -659,4 +659,35 @@ fn test_distribute_secondary_fuzz_style() {
         );
         assert_eq!(client.get_secondary_pool(), 0, "Secondary pool must be zero after distribution");
     }
+}
+
+// ── Issue #236: empty recipients guard on distribute ─────────────────────────
+
+/// Calling distribute with an empty collaborators list must panic before transfers.
+#[test]
+#[should_panic(expected = "recipients list cannot be empty")]
+fn test_distribute_empty_recipients_panics() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (contract_id, client) = setup(&env);
+
+    let admin = Address::generate(&env);
+    let b = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+    let token = make_token(&env, &token_admin);
+
+    client.initialize(
+        &vec![&env, admin.clone(), b],
+        &vec![&env, 5000_u32, 5000_u32],
+    );
+    mint(&env, &token, &contract_id, 1000);
+
+    let empty_collaborators: SorobanVec<Address> = vec![&env];
+    env.as_contract(&contract_id, || {
+        env.storage()
+            .instance()
+            .set(&DataKey::Collaborators, &empty_collaborators);
+    });
+
+    client.distribute(&token);
 }
