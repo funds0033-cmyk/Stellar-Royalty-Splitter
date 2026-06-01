@@ -349,6 +349,66 @@ export async function getFreshAccount(callerAddress) {
 }
 
 /**
+ * Parse a Soroban simulation or submission error into a structured object
+ * with a human-readable message, error code, and any available context.
+ */
+export function parseSorobanError(error) {
+  // Simulation error from prepareTransaction / simulateTransaction
+  if (error?.result?.error) {
+    const raw = error.result.error;
+    return {
+      status: 400,
+      code: "SOROBAN_SIMULATION_ERROR",
+      message: `Contract simulation failed: ${raw}`,
+      detail: raw,
+    };
+  }
+
+  // SorobanRpc simulation error object
+  if (error?._type === "SimulateTransactionError" || error?.events !== undefined && error?.error) {
+    return {
+      status: 400,
+      code: "SOROBAN_SIMULATION_ERROR",
+      message: `Contract simulation failed: ${error.error}`,
+      detail: error.error,
+    };
+  }
+
+  // Horizon submission error — extract result_codes
+  const resultCodes =
+    error?.response?.data?.extras?.result_codes ??
+    error?.data?.extras?.result_codes ??
+    error?.extras?.result_codes;
+
+  if (resultCodes) {
+    const txCode = resultCodes.transaction ?? "unknown";
+    const opCodes = resultCodes.operations ?? [];
+    const detail = opCodes.length
+      ? `transaction: ${txCode}, operations: ${opCodes.join(", ")}`
+      : `transaction: ${txCode}`;
+    return {
+      status: 400,
+      code: "SOROBAN_INVOCATION_ERROR",
+      message: `Contract invocation failed — ${detail}`,
+      detail: resultCodes,
+    };
+  }
+
+  // Generic Horizon/RPC HTTP error
+  const httpStatus = error?.response?.status ?? error?.status;
+  if (httpStatus && httpStatus >= 400) {
+    return {
+      status: httpStatus >= 500 ? 502 : 400,
+      code: "STELLAR_RPC_ERROR",
+      message: error?.message ?? `Stellar RPC returned HTTP ${httpStatus}`,
+      detail: error?.response?.data ?? null,
+    };
+  }
+
+  return null;
+}
+
+/**
  * Build an unsigned Soroban transaction XDR for a contract invocation.
  * The frontend signs and submits it.
  */
