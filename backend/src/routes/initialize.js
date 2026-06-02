@@ -2,6 +2,7 @@ import { Router } from "express";
 import { addressToScVal, u32ToScVal, vecToScVal, isContractInitialized } from "../stellar.js";
 import { validate, initializeSchema, validateInitializePayloadSize } from "../validation.js";
 import { buildAndRecordTransaction } from "./_shared.js";
+import { sendError } from "../error-response.js";
 
 export const initializeRouter = Router();
 
