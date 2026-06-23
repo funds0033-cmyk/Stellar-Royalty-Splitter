@@ -3,6 +3,62 @@
 import { extractContractError } from "./lib/contract-errors";
 
 const BASE = "/api";
+export const SESSION_EXPIRED_EVENT = "srs:session-expired";
+const SESSION_EXPIRED_MESSAGE =
+  "Your session has expired. Please connect your wallet again.";
+
+let sessionExpiryNotified = false;
+
+function notifySessionExpired() {
+  if (sessionExpiryNotified || typeof window === "undefined") return;
+  sessionExpiryNotified = true;
+  window.dispatchEvent(
+    new CustomEvent(SESSION_EXPIRED_EVENT, {
+      detail: { message: SESSION_EXPIRED_MESSAGE },
+    }),
+  );
+}
+
+async function readJson(res: Response): Promise<unknown> {
+  const text = await res.text();
+  if (!text) return null;
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function getErrorMessage(data: unknown, status: number) {
+  if (
+    data &&
+    typeof data === "object" &&
+    "error" in data &&
+    typeof data.error === "string"
+  ) {
+    return data.error;
+  }
+
+  return `Request failed (${status})`;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, init);
+  const data = await readJson(res);
+
+  if (res.status === 401) {
+    notifySessionExpired();
+    throw new Error(SESSION_EXPIRED_MESSAGE);
+  }
+
+  if (res.ok) {
+    sessionExpiryNotified = false;
+    return data as T;
+  }
+
+  throw new Error(getErrorMessage(data, res.status));
+}
 
 // #279: surface a structured `code + message + details` shape from
 // the backend's error response instead of just `data.error`. The
@@ -30,25 +86,24 @@ export class BackendApiError extends Error {
 
 function readErrorBody(status: number, data: unknown): BackendApiError {
   const parsed = extractContractError(data ?? { error: "Request failed" });
-  return new BackendApiError(status, parsed.code, parsed.message, parsed.details);
+  return new BackendApiError(
+    status,
+    parsed.code,
+    parsed.message,
+    parsed.details,
+  );
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  return request<T>(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const data = await res.json();
-  if (!res.ok) throw readErrorBody(res.status, data);
-  return data as T;
 }
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`);
-  const data = await res.json();
-  if (!res.ok) throw readErrorBody(res.status, data);
-  return data as T;
+  return request<T>(path);
 }
 
 export interface TransactionRecord {
@@ -117,7 +172,6 @@ export const api = {
     contractId: string;
     walletAddress: string;
     tokenId: string;
-    amount: number;
   }) => post<{ xdr: string; transactionId: number }>("/distribute", body),
 
   getContractBalance: (contractId: string, tokenId: string) =>
@@ -252,8 +306,15 @@ export const api = {
   getContractStatus: (contractId: string) =>
     get<{ initialized: boolean }>(`/contract/status/${contractId}`),
 
+  getContractBalance: (contractId: string, tokenId: string) =>
+    get<{ balance: string }>(
+      `/contract/balance/${contractId}?tokenId=${encodeURIComponent(tokenId)}`,
+    ),
+
   getContractVersion: (contractId: string) =>
-    get<{ contractId: string; version: string }>(`/contract/version/${contractId}`),
+    get<{ contractId: string; version: string }>(
+      `/contract/version/${contractId}`,
+    ),
 
   // NEW: Fetch royalty rate from contract
   getRoyaltyRate: (contractId: string) =>
