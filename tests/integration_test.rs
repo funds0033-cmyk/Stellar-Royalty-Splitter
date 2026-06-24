@@ -5320,3 +5320,304 @@ fn test_events_emitted_before_state_changes() {
     let events = env.events().all();
     assert!(events.len() > 0);
 }
+
+// ── Issue #410: Additional snapshot tests for storage state transitions ────────
+
+/// Issue #410 — After admin_transfer, PendingAdmin is set in instance storage.
+#[test]
+fn test_snapshot_pending_admin_set_after_admin_transfer() {
+    let env = Env::default();
+    env.mock_all_auths_allowing_non_root_auth();
+    let (contract_id, client) = setup(&env);
+
+    let admin = Address::generate(&env);
+    let new_admin = Address::generate(&env);
+    client.initialize(
+        &vec![&env, admin.clone()],
+        &vec![&env, 10_000_u32],
+    );
+
+    client.admin_transfer(&new_admin);
+
+    env.as_contract(&contract_id, || {
+        let pending: Address = env
+            .storage()
+            .instance()
+            .get(&StorageKey::PendingAdmin)
+            .expect("PendingAdmin should be set after admin_transfer");
+        assert_eq!(pending, new_admin);
+        // Admin must not have changed yet.
+        let current_admin: Address = env
+            .storage()
+            .instance()
+            .get(&StorageKey::Admin)
+            .expect("Admin should still be set");
+        assert_eq!(current_admin, admin);
+    });
+}
+
+/// Issue #410 — After accept_admin, Admin changes to new_admin and PendingAdmin is cleared.
+#[test]
+fn test_snapshot_admin_changes_and_pending_cleared_after_accept_admin() {
+    let env = Env::default();
+    env.mock_all_auths_allowing_non_root_auth();
+    let (contract_id, client) = setup(&env);
+
+    let admin = Address::generate(&env);
+    let new_admin = Address::generate(&env);
+    client.initialize(
+        &vec![&env, admin.clone()],
+        &vec![&env, 10_000_u32],
+    );
+
+    client.admin_transfer(&new_admin);
+    client.accept_admin();
+
+    env.as_contract(&contract_id, || {
+        // Admin must now be new_admin.
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&StorageKey::Admin)
+            .expect("Admin should be stored after accept_admin");
+        assert_eq!(stored_admin, new_admin);
+        // PendingAdmin must be cleared.
+        assert!(
+            !env.storage().instance().has(&StorageKey::PendingAdmin),
+            "PendingAdmin should be cleared after accept_admin"
+        );
+    });
+}
+
+/// Issue #410 — After pause, Paused=true is stored in instance storage.
+#[test]
+fn test_snapshot_paused_true_after_pause() {
+    let env = Env::default();
+    env.mock_all_auths_allowing_non_root_auth();
+    let (contract_id, client) = setup(&env);
+
+    let admin = Address::generate(&env);
+    client.initialize(
+        &vec![&env, admin.clone()],
+        &vec![&env, 10_000_u32],
+    );
+
+    client.pause();
+
+    env.as_contract(&contract_id, || {
+        let paused: bool = env
+            .storage()
+            .instance()
+            .get(&StorageKey::Paused)
+            .expect("Paused should be stored after pause");
+        assert!(paused, "Paused should be true after pause()");
+    });
+}
+
+/// Issue #410 — After unpause, Paused is false or cleared in instance storage.
+#[test]
+fn test_snapshot_paused_cleared_after_unpause() {
+    let env = Env::default();
+    env.mock_all_auths_allowing_non_root_auth();
+    let (contract_id, client) = setup(&env);
+
+    let admin = Address::generate(&env);
+    client.initialize(
+        &vec![&env, admin.clone()],
+        &vec![&env, 10_000_u32],
+    );
+
+    client.pause();
+    client.unpause();
+
+    env.as_contract(&contract_id, || {
+        // Either the key is absent, or the value is false.
+        let paused: bool = env
+            .storage()
+            .instance()
+            .get(&StorageKey::Paused)
+            .unwrap_or(false);
+        assert!(!paused, "Paused should be false or absent after unpause()");
+    });
+}
+
+/// Issue #410 — After set_royalty_rate, RoyaltyRate is stored and RoyaltyRateHistory is updated.
+#[test]
+fn test_snapshot_royalty_rate_stored_and_history_updated() {
+    let env = Env::default();
+    env.mock_all_auths_allowing_non_root_auth();
+    let (contract_id, client) = setup(&env);
+
+    let admin = Address::generate(&env);
+    client.initialize(
+        &vec![&env, admin.clone()],
+        &vec![&env, 10_000_u32],
+    );
+
+    let new_rate: u32 = 500;
+    client.set_royalty_rate(&new_rate);
+
+    env.as_contract(&contract_id, || {
+        let stored_rate: u32 = env
+            .storage()
+            .instance()
+            .get(&StorageKey::RoyaltyRate)
+            .expect("RoyaltyRate should be stored after set_royalty_rate");
+        assert_eq!(stored_rate, new_rate);
+
+        // RoyaltyRateHistory in persistent storage must be non-empty.
+        let history_exists = env.storage().persistent().has(&StorageKey::RoyaltyRateHistory);
+        assert!(history_exists, "RoyaltyRateHistory should exist after set_royalty_rate");
+    });
+}
+
+/// Issue #410 — After two distributes, DistributeHistory counter equals 2.
+#[test]
+fn test_snapshot_distribute_history_has_both_records_after_two_distributes() {
+    let env = Env::default();
+    env.mock_all_auths_allowing_non_root_auth();
+    let (contract_id, client) = setup(&env);
+
+    let admin = Address::generate(&env);
+    let b = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+    let token = make_token(&env, &token_admin);
+
+    client.initialize(
+        &vec![&env, admin.clone(), b.clone()],
+        &vec![&env, 5_000_u32, 5_000_u32],
+    );
+
+    mint(&env, &token, &contract_id, 10_000);
+    env.ledger().with_mut(|l| l.timestamp = 1_700_000_001);
+    client.distribute(&token);
+
+    mint(&env, &token, &contract_id, 20_000);
+    env.ledger().with_mut(|l| l.timestamp = 1_700_000_002);
+    client.distribute(&token);
+
+    env.as_contract(&contract_id, || {
+        let count: u64 = env
+            .storage()
+            .instance()
+            .get(&StorageKey::DistributeHistory)
+            .expect("DistributeHistory should be stored after two distributes");
+        assert_eq!(count, 2, "DistributeHistory should be 2 after two distributes");
+    });
+}
+
+/// Issue #410 — Collaborators count is exactly 3 after initialize with 3 collaborators.
+#[test]
+fn test_snapshot_collaborators_count_after_initialize_with_three() {
+    let env = Env::default();
+    env.mock_all_auths_allowing_non_root_auth();
+    let (contract_id, client) = setup(&env);
+
+    let a = Address::generate(&env);
+    let b = Address::generate(&env);
+    let c = Address::generate(&env);
+
+    client.initialize(
+        &vec![&env, a.clone(), b.clone(), c.clone()],
+        &vec![&env, 4_000_u32, 3_000_u32, 3_000_u32],
+    );
+
+    env.as_contract(&contract_id, || {
+        let stored: SorobanVec<Address> = env
+            .storage()
+            .persistent()
+            .get(&StorageKey::Collaborators)
+            .expect("Collaborators should be stored");
+        assert_eq!(stored.len(), 3, "Collaborators count should be 3");
+    });
+}
+
+/// Issue #410 — ShareMap has exact values after initialize.
+#[test]
+fn test_snapshot_share_map_exact_values_after_initialize() {
+    let env = Env::default();
+    env.mock_all_auths_allowing_non_root_auth();
+    let (contract_id, client) = setup(&env);
+
+    let a = Address::generate(&env);
+    let b = Address::generate(&env);
+    let c = Address::generate(&env);
+
+    client.initialize(
+        &vec![&env, a.clone(), b.clone(), c.clone()],
+        &vec![&env, 4_000_u32, 3_500_u32, 2_500_u32],
+    );
+
+    env.as_contract(&contract_id, || {
+        let stored: Map<Address, u32> = env
+            .storage()
+            .persistent()
+            .get(&StorageKey::ShareMap)
+            .expect("ShareMap should be stored");
+        assert_eq!(stored.get(a).unwrap(), 4_000, "a's share should be 4000");
+        assert_eq!(stored.get(b).unwrap(), 3_500, "b's share should be 3500");
+        assert_eq!(stored.get(c).unwrap(), 2_500, "c's share should be 2500");
+    });
+}
+
+/// Issue #410 — ContractVersion is stored on initialize and matches VERSION constant.
+#[test]
+fn test_snapshot_contract_version_stored_on_initialize() {
+    let env = Env::default();
+    env.mock_all_auths_allowing_non_root_auth();
+    let (contract_id, client) = setup(&env);
+
+    let admin = Address::generate(&env);
+    client.initialize(
+        &vec![&env, admin.clone()],
+        &vec![&env, 10_000_u32],
+    );
+
+    env.as_contract(&contract_id, || {
+        let stored_version: String = env
+            .storage()
+            .instance()
+            .get(&StorageKey::ContractVersion)
+            .expect("ContractVersion should be stored after initialize");
+        assert_eq!(
+            stored_version,
+            String::from_str(&env, VERSION),
+            "ContractVersion should match the VERSION constant"
+        );
+    });
+}
+
+/// Issue #410 — LastDistribution timestamp matches ledger timestamp after distribute.
+#[test]
+fn test_snapshot_last_distribution_timestamp_after_distribute() {
+    let env = Env::default();
+    env.mock_all_auths_allowing_non_root_auth();
+    let (contract_id, client) = setup(&env);
+
+    let admin = Address::generate(&env);
+    let b = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+    let token = make_token(&env, &token_admin);
+
+    client.initialize(
+        &vec![&env, admin.clone(), b.clone()],
+        &vec![&env, 6_000_u32, 4_000_u32],
+    );
+
+    let expected_ts: u64 = 1_750_000_000;
+    mint(&env, &token, &contract_id, 50_000);
+    env.ledger().with_mut(|l| l.timestamp = expected_ts);
+    client.distribute(&token);
+
+    env.as_contract(&contract_id, || {
+        let last_ts: u64 = env
+            .storage()
+            .instance()
+            .get(&StorageKey::LastDistribution)
+            .expect("LastDistribution should be stored after distribute");
+        assert_eq!(
+            last_ts, expected_ts,
+            "LastDistribution timestamp should equal ledger timestamp"
+        );
+    });
+}
