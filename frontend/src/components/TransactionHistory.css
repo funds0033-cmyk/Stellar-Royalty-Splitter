@@ -328,6 +328,110 @@
   background: #2563eb;
 }
 
+.transactions-table {
+  overflow-x: hidden;
+  min-width: 0;
+}
+
+.transactions-table table {
+  min-width: 100%;
+}
+
+.transactions-table td,
+.transactions-table th {
+  white-space: normal;
+  word-break: break-word;
+}
+
+@media (max-width: 768px) {
+  .history-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  .history-header button {
+    width: 100%;
+  }
+
+  .pagination {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  .pagination button {
+    width: 100%;
+  }
+
+  .transactions-table table,
+  .transactions-table thead,
+  .transactions-table tbody,
+  .transactions-table th,
+  .transactions-table td,
+  .transactions-table tr {
+    display: block;
+  }
+
+  .transactions-table thead tr {
+    position: absolute;
+    top: -9999px;
+    left: -9999px;
+  }
+
+  .transactions-table tr {
+    margin-bottom: 1rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    background: white;
+    padding: 0.75rem;
+  }
+
+  .transactions-table td {
+    padding: 0.75rem 0.5rem;
+    border: none;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .transactions-table td::before {
+    content: attr(data-label);
+    width: 35%;
+    flex: 0 0 35%;
+    color: #6b7280;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .transactions-table td[data-label="TX Hash"],
+  .transactions-table td[data-label="Initiator"] {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .transactions-table td[data-label="TX Hash"] .tx-hash-cell {
+    width: 100%;
+  }
+
+  .transactions-table td:last-child {
+    border-bottom: none;
+  }
+
+  .history-header button,
+  .pagination button,
+  .tx-copy-btn,
+  .copy-btn,
+  .copy-btn-sm {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
 .tx-detail-error {
   background: #fef2f2;
   border: 1px solid #fecaca;

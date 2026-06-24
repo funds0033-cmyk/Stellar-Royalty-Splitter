@@ -208,7 +208,7 @@ td:last-child {
 
 .copy-btn-sm {
   margin-left: 6px;
-  padding: 2px 6px;
+  padding: 8px 10px;
   background: transparent;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
@@ -218,6 +218,9 @@ td:last-child {
   line-height: 1;
   transition: all var(--transition-base);
   vertical-align: middle;
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: manipulation;
 }
 
 .copy-btn-sm:hover {
