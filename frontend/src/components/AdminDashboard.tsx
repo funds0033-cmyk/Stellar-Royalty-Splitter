@@ -179,7 +179,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       <div className="history-section">
         <div className="history-header">
           <h2>Initialize History</h2>
-          <button onClick={loadInitializeHistory} className="refresh-mini-btn">
+          <button onClick={loadInitializeHistory} className="refresh-mini-btn" aria-label="Refresh initialize history">
             🔄
           </button>
         </div>

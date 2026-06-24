@@ -67,7 +67,7 @@
 }
 
 .info-btn {
-  padding: 0.6rem 1rem;
+  padding: 0.75rem 1rem;
   background: linear-gradient(
     135deg,
     var(--accent-primary) 0%,
@@ -80,6 +80,9 @@
   font-weight: 500;
   transition: all var(--transition-base);
   box-shadow: var(--shadow-md);
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: manipulation;
 }
 
 .info-btn:hover {
@@ -178,6 +181,9 @@
   font-weight: 500;
   transition: all var(--transition-base);
   white-space: nowrap;
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: manipulation;
 }
 
 .copy-btn:hover {
@@ -260,6 +266,9 @@
   cursor: pointer;
   font-size: 1rem;
   transition: all var(--transition-base);
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: manipulation;
 }
 
 .refresh-mini-btn:hover {
@@ -805,6 +814,7 @@
   gap: var(--spacing-sm);
   margin-top: var(--spacing-md);
   flex-wrap: wrap;
+  align-items: stretch;
 }
 
 .action-btn {
@@ -816,9 +826,12 @@
   cursor: pointer;
   font-size: 0.9rem;
   transition: all var(--transition-base);
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: manipulation;
 }
 
 .action-btn:hover {

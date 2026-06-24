@@ -113,11 +113,12 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                     onClick={() => openModal(tx)}
                     title="Click to view details"
                   >
-                    <td><span className="tx-type">{tx.type}</span></td>
-                    <td title={tx.initiatorAddress}>{truncateAddress(tx.initiatorAddress)}</td>
-                    <td>{tx.requestedAmount ? formatNumber(tx.requestedAmount) : "—"}</td>
+                    <td data-label="Type"><span className="tx-type">{tx.type}</span></td>
+                    <td data-label="Initiator" title={tx.initiatorAddress}>{truncateAddress(tx.initiatorAddress)}</td>
+                    <td data-label="Amount">{tx.requestedAmount ? formatNumber(tx.requestedAmount) : "—"}</td>
                     <td
                       className="tx-hash-cell"
+                      data-label="TX Hash"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <span className="tx-hash-text">{truncateHash(tx.txHash)}</span>
@@ -129,7 +130,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                         />
                       )}
                     </td>
-                    <td>
+                    <td data-label="Status">
                       <span
                         className="status-badge"
                         style={{
@@ -140,7 +141,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                         {tx.status}
                       </span>
                     </td>
-                    <td>{formatDate(tx.timestamp)}</td>
+                    <td data-label="Timestamp">{formatDate(tx.timestamp)}</td>
                   </tr>
                 ))}
               </tbody>
