@@ -59,6 +59,20 @@ export function initializeDatabase() {
       sql: `/* initial schema — already applied via CREATE TABLE IF NOT EXISTS */`,
     },
     {
+      // Issue #421: permanent per-contract nonce dedup for /api/v1/initialize.
+      version: 6,
+      sql: `
+        CREATE TABLE IF NOT EXISTS request_nonces (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          contractId TEXT NOT NULL,
+          nonce TEXT NOT NULL,
+          createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(contractId, nonce)
+        );
+        CREATE INDEX IF NOT EXISTS idx_request_nonces_contractId ON request_nonces(contractId);
+      `,
+    },
+    {
       version: 5,
       sql: `
         -- Issue #401: Dead-letter queue for failed webhook deliveries
