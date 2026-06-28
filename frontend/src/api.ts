@@ -1,8 +1,9 @@
 // Thin client that talks to the Express backend
 
 import { extractContractError } from "./lib/contract-errors";
+import { Keypair } from "@stellar/stellar-sdk";
 
-const BASE = "/api";
+const BASE = "/api/v1";
 
 // #279: surface a structured `code + message + details` shape from
 // the backend's error response instead of just `data.error`. The
@@ -34,10 +35,35 @@ function readErrorBody(status: number, data: unknown): BackendApiError {
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
+  const bodyText = JSON.stringify(body);
+  const timestamp = new Date().toISOString();
+  const nonce = crypto.randomUUID();
+  const secret = import.meta.env.VITE_REQUEST_SIGNING_SECRET;
+  if (!secret) {
+    throw new BackendApiError(
+      401,
+      "missing_request_signing_secret",
+      "Request signing is not configured.",
+    );
+  }
+  const keypair = Keypair.fromSecret(secret);
+  const bodyHashBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(bodyText));
+  const bodyHash = Array.from(new Uint8Array(bodyHashBuffer))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  const payload = ["POST", `${BASE}${path}`, timestamp, nonce, bodyHash].join("\n");
+  const signature = btoa(String.fromCharCode(...keypair.sign(new TextEncoder().encode(payload))));
+
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    headers: {
+      "Content-Type": "application/json",
+      "x-signature-public-key": keypair.publicKey(),
+      "x-signature": signature,
+      "x-signature-timestamp": timestamp,
+      "x-signature-nonce": nonce,
+    },
+    body: bodyText,
   });
   const data = await res.json();
   if (!res.ok) throw readErrorBody(res.status, data);

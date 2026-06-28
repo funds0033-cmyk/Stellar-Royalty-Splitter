@@ -20,6 +20,7 @@ import { adminRouter } from "./routes/admin.js";
 import { initializeDatabase } from "./database/index.js";
 import db from "./database/index.js";
 import { initializeSigningKey } from "./signing-key.js";
+import { verifySignedPostRequests } from "./request-signing.js";
 
 // Initialize database on startup
 initializeDatabase();
@@ -81,7 +82,14 @@ const writeLimiter = rateLimit({
 });
 
 app.use(generalLimiter);
-app.use(express.json({ limit: "10kb" }));
+app.use(
+  express.json({
+    limit: "10kb",
+    verify: (req, _res, buf) => {
+      req.rawBody = buf.toString("utf8");
+    },
+  })
+);
 
 // Enforce Content-Type: application/json on POST requests
 app.use((req, res, next) => {
@@ -90,6 +98,8 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+app.use(verifySignedPostRequests);
 
 // Per-request timeout middleware
 const REQUEST_TIMEOUT_MS = parseInt(process.env.REQUEST_TIMEOUT_MS ?? "30000");
