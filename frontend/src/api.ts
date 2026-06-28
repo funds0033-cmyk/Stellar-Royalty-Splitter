@@ -194,6 +194,14 @@ export interface RoyaltyStats {
   } | null;
 }
 
+// #504: contract pause state for the distribution UI banner.
+export interface PauseState {
+  paused: boolean;
+  pauseTimestamp: number;
+  pauseSource: string | null;
+  remainingSeconds: number;
+}
+
 export type ContractStateCacheStatus = "cached" | "live" | "error";
 
 export interface ContractState {
@@ -418,6 +426,10 @@ export const api = {
     get<{ contractId: string; version: string }>(
       `/contract/version/${contractId}`,
     ),
+
+  // #504: Fetch the contract's pause state so the UI can warn and block.
+  getPauseState: (contractId: string) =>
+    get<PauseState>(`/contract/pause/${contractId}`),
 
   getContractState: (
     contractId: string,

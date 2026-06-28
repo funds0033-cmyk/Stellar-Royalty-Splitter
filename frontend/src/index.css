@@ -551,6 +551,25 @@ td:last-child {
   border: 1px solid var(--info);
 }
 
+/* #504: contract paused warning banner */
+.pause-banner {
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  background: var(--error-light);
+  color: var(--error-dark);
+  border: 1px solid var(--error-color);
+  font-size: 0.9rem;
+}
+
+.pause-banner p {
+  margin: 0.4rem 0 0;
+}
+
+.pause-banner__countdown {
+  font-variant-numeric: tabular-nums;
+}
+
 .form-status__tx-link {
   display: inline-flex;
   align-items: center;
