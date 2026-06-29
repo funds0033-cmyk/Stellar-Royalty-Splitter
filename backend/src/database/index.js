@@ -63,6 +63,14 @@ export {
   getRoyaltyStatistics,
   applyLargestRemainder,
   commitSecondaryDistributionAtomic,
+  addToRetryQueue,
+  getReadyRetryItems,
+  updateRetryItem,
+  removeFromRetryQueue,
+  moveToDeadLetterQueue,
+  getDeadLetterItems,
+  getRetryQueueStats,
+  getDeadLetterQueueStats,
 } from "./secondary-royalties.js";
 
 // Analytics

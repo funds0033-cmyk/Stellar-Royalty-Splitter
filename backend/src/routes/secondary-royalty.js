@@ -8,6 +8,7 @@ import {
   getRoyaltyRateFromContract,
   server,
 } from "../stellar.js";
+import logger from "../logger.js";
 import {
   recordTransaction,
   recordSecondarySale,
@@ -18,6 +19,10 @@ import {
   addAuditLog,
   applyLargestRemainder,
   commitSecondaryDistributionAtomic,
+  addToRetryQueue,
+  getRetryQueueStats,
+  getDeadLetterQueueStats,
+  getDeadLetterItems,
 } from "../database/index.js";
 import { idempotencyMiddleware } from "../idempotency.js";
 import {
@@ -277,9 +282,40 @@ secondaryRoyaltyRouter.post(
 
       // Build the Stellar XDR *before* any DB writes so that a Stellar failure
       // never leaves sales in an inconsistent state (#471).
-      const txXdr = await buildTx(walletAddress, contractId, "distribute_secondary_royalties", [
-        addressToScVal(tokenId),
-      ]);
+      let txXdr;
+      try {
+        txXdr = await buildTx(walletAddress, contractId, "distribute_secondary_royalties", [
+          addressToScVal(tokenId),
+        ]);
+      } catch (buildError) {
+        // Token validation or contract call failed - add to retry queue
+        const errorMessage = buildError.message || String(buildError);
+        addToRetryQueue({
+          contractId,
+          walletAddress,
+          tokenId,
+          collaborators,
+          totalRoyalties,
+          numberOfSales: pendingSales.length,
+          pendingSaleIds: pendingSales.map((s) => s.id),
+          totalDustAllocated,
+          dustAuditData,
+          errorMessage,
+        });
+        
+        logger.error("Secondary royalty distribution failed, added to retry queue", {
+          contractId,
+          tokenId,
+          error: errorMessage,
+        });
+
+        return sendError(
+          res,
+          503,
+          "distribution_failed_retry_queued",
+          `Distribution failed and queued for retry: ${errorMessage}`
+        );
+      }
 
       // All DB writes are atomic: if any step fails, the transaction rolls back
       // and pending sales remain undistributed (#471).
@@ -402,6 +438,56 @@ secondaryRoyaltyRouter.get(
       );
 
       res.json({ distributions, pagination });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/secondary-royalty/retry-stats
+ * Returns statistics about the retry queue
+ */
+secondaryRoyaltyRouter.get("/retry-stats", (req, res, next) => {
+  try {
+    const stats = getRetryQueueStats();
+    res.json(stats);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/secondary-royalty/dlq-stats
+ * Returns statistics about the dead-letter queue
+ */
+secondaryRoyaltyRouter.get("/dlq-stats", (req, res, next) => {
+  try {
+    const stats = getDeadLetterQueueStats();
+    res.json(stats);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/secondary-royalty/dlq/:contractId
+ * Query params: limit, offset
+ * Returns paginated list of dead-letter queue items for a contract
+ */
+secondaryRoyaltyRouter.get(
+  "/dlq/:contractId",
+  validateContractIdMiddleware,
+  (req, res, next) => {
+    try {
+      const { contractId } = req.params;
+      const pagination = parsePagination(req.query, res);
+      if (!pagination) return;
+      const { limit, offset } = pagination;
+
+      const dlqItems = getDeadLetterItems(contractId, limit, offset);
+
+      res.json({ items: dlqItems, pagination });
     } catch (err) {
       next(err);
     }

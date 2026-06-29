@@ -34,6 +34,7 @@ import { createLegacyApiRedirectMiddleware } from "./legacy-api-redirect.js";
 import { getCacheManager } from "./cache.js";
 import { AdminEventListener } from "./events/adminEventListener.js";
 import { getConfiguredContractId } from "./stellar.js";
+import { startRecoveryJob, stopRecoveryJob } from "./jobs/secondary-royalty-recovery.js";
 
 // Initialize database on startup
 initializeDatabase();
@@ -295,6 +296,18 @@ if (contractId) {
   }
 }
 
+// Start secondary royalty recovery job
+if (process.env.NODE_ENV !== "test" && !process.env.DISABLE_RECOVERY_JOB) {
+  try {
+    startRecoveryJob();
+    logger.info("[Startup] Secondary royalty recovery job started");
+  } catch (err) {
+    logger.error("[Startup] Failed to start recovery job", {
+      error: err.message,
+    });
+  }
+}
+
 // Graceful shutdown — include event listener and cache cleanup
 const originalShutdown = createGracefulShutdownHandler({
   server,
@@ -307,6 +320,7 @@ const handleShutdown = (signal) => {
   if (adminEventListener) {
     adminEventListener.stop();
   }
+  stopRecoveryJob();
   const cache = getCacheManager();
   cache.disconnect().catch(() => {});
   originalShutdown(signal);
