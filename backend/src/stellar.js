@@ -845,6 +845,38 @@ export async function isContractInitialized(contractId) {
 }
 
 /**
+ * Fetch the admin of a contract from the chain by simulating get_admin().
+ */
+export async function getContractAdmin(contractId) {
+  const contract = new Contract(contractId);
+  const dummyAccount = new Account(
+    "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN",
+    "0"
+  );
+  const tx = new TransactionBuilder(dummyAccount, {
+    fee: BASE_FEE,
+    networkPassphrase,
+  })
+    .addOperation(contract.call("get_admin"))
+    .setTimeout(30)
+    .build();
+
+  const sim = await withTimeout(
+    server.simulateTransaction(tx),
+    SOROBAN_RPC_TIMEOUT_MS,
+    "Soroban simulateTransaction"
+  );
+  if (SorobanRpc.Api.isSimulationError(sim)) {
+    throw new Error("Failed to simulate get_admin call");
+  }
+  const retval = sim.result?.retval;
+  if (!retval) {
+    throw new Error("get_admin simulation returned empty value");
+  }
+  return Address.fromScVal(retval).toString();
+}
+
+/**
  * Fetch the on-chain contract version via read-only simulation.
  * Returns the semver string, or null when the contract is not initialized.
  */

@@ -76,11 +76,9 @@ export function getTransactionHistory(contractId, limit = 50, offset = 0) {
       t.blockTime,
       t.status,
       t.errorMessage,
-      COUNT(dp.id) as payoutCount
-    FROM transactions t
-    LEFT JOIN distribution_payouts dp ON t.id = dp.transactionId
+      (SELECT COUNT(*) FROM distribution_payouts dp WHERE dp.transactionId = t.id) as payoutCount
+    FROM transactions t INDEXED BY idx_transactions_contractId_timestamp_desc
     WHERE t.contractId = ?
-    GROUP BY t.id
     ORDER BY t.timestamp DESC
     LIMIT ? OFFSET ?
   `);

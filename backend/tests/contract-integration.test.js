@@ -51,6 +51,7 @@ await jest.unstable_mockModule("../src/database/index.js", () => ({
   recordNonceIfNew: jest.fn(() => true),
   initializeDatabase:  jest.fn(),
   getMigrationVersion: jest.fn(() => 1),
+  lookupCollaborators: jest.fn(() => []),
 }));
 
 // Import the shared test app (mounts all routers) AFTER the mocks are in place.

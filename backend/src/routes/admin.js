@@ -13,6 +13,8 @@ import { getCacheManager } from "../cache.js"; // #399
 import { listDeadLetters, markDeadLetterRetried } from "../database/webhooks.js"; // #428
 import { deliverWithRetry } from "../webhook-delivery.js"; // #428
 import { createApiKey, listApiKeys, revokeApiKey } from "../database/index.js";
+import { requireRequestSignature, requireRole } from "../middleware/rbac.js";
+import { verifyRequestSignatureMiddleware } from "../request-signing.js";
 
 export const adminRouter = Router();
 
@@ -37,8 +39,14 @@ function extractBearerToken(req) {
 function requireAdminRotateTokenOrRole(req, res, next) {
   // 1. Try bearer token if configured
   const token = extractBearerToken(req);
-  if (token && isAdminRotateTokenValid(token)) {
-    return next();
+  if (token) {
+    const expected = process.env.ADMIN_ROTATE_TOKEN;
+    if (!expected || expected.trim().length === 0) {
+      return sendError(res, 503, "service_unavailable", "Admin rotate token is not configured on this server");
+    }
+    if (isAdminRotateTokenValid(token)) {
+      return next();
+    }
   }
 
   // 2. Fallback to RBAC admin role
@@ -103,7 +111,7 @@ const setAdminsSchema = z
  * Body: { contractId, walletAddress, admins: string[], threshold: number }
  * Default threshold is 2 (2-of-N multi-sig).
  */
-adminRouter.post("/set-admins", requireRequestSignature, requireRole("admin"), validate(setAdminsSchema), async (req, res, next) => {
+adminRouter.post("/set-admins", requireRequestSignature, validate(setAdminsSchema), requireRole("admin"), async (req, res, next) => {
   try {
     const { contractId, walletAddress, admins, threshold = 2 } = req.body;
 
@@ -216,7 +224,7 @@ adminRouter.post("/transfer", requireRequestSignature, requireRole("admin"), asy
 // API key administration (#420)
 // ---------------------------------------------------------------------------
 
-adminRouter.post("/generate-key", requireAdminRotateToken, (req, res, next) => {
+adminRouter.post("/generate-key", requireAdminRotateTokenOrRole, (req, res, next) => {
   try {
     const { label } = req.body ?? {};
     res.json(createApiKey(label));
@@ -225,7 +233,7 @@ adminRouter.post("/generate-key", requireAdminRotateToken, (req, res, next) => {
   }
 });
 
-adminRouter.get("/keys", requireAdminRotateToken, (_req, res, next) => {
+adminRouter.get("/keys", requireAdminRotateTokenOrRole, (_req, res, next) => {
   try {
     res.json({ keys: listApiKeys() });
   } catch (err) {
@@ -233,7 +241,7 @@ adminRouter.get("/keys", requireAdminRotateToken, (_req, res, next) => {
   }
 });
 
-adminRouter.post("/keys/:id/revoke", requireAdminRotateToken, (req, res, next) => {
+adminRouter.post("/keys/:id/revoke", requireAdminRotateTokenOrRole, (req, res, next) => {
   try {
     const id = Number.parseInt(req.params.id, 10);
     if (!Number.isFinite(id) || id <= 0) {

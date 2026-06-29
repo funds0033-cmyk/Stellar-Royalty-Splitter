@@ -84,7 +84,7 @@ await jest.unstable_mockModule("../src/cache.js", () => ({
       consistent: true,
       cachedAdmin: "GADMIN",
       liveAdmin: await fetchLiveAdmin(),
-      elapsedMs: 1,
+      elapsedMs: 5,
     })),
     invalidateAdmin: jest.fn(),
   })),

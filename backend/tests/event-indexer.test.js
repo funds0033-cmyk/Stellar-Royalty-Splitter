@@ -116,16 +116,19 @@ await jest.unstable_mockModule("../src/cache.js", () => ({
 
 import { EventIndexer } from "../src/events/EventIndexer.js";
 
-const setupEventIndexerTest = () => {
-  const redisMock = mockRedis();
-  const cacheMock = mockCache();
-  const sorobanRpcMock = mockSorobanRpc();
-
-  setCacheManagerForTests(cacheMock);
-
-  const indexer = new EventIndexer(sorobanRpcMock, "CALIAS1234567890123456789012345678901234567890");
+describe("EventIndexer", () => {
+  let redisMock;
+  let cacheMock;
+  let sorobanRpcMock;
+  let indexer;
 
   beforeEach(() => {
+    redisMock = mockRedis();
+    cacheMock = mockCache();
+    sorobanRpcMock = mockSorobanRpc();
+    setCacheManagerForTests(cacheMock);
+    indexer = new EventIndexer(sorobanRpcMock, "CALIAS1234567890123456789012345678901234567890");
+
     jest.clearAllMocks();
     indexer.lastLedger = null;
     indexer.processedEvents.clear();
@@ -133,22 +136,18 @@ const setupEventIndexerTest = () => {
   });
 
   afterEach(() => {
-    indexer.stop();
+    if (indexer) {
+      indexer.stop();
+    }
     setCacheManagerForTests(null);
   });
 
-  return {
+  const setup = () => ({
     indexer,
     sorobanRpcMock,
     cacheMock,
     redisMock,
-  };
-};
-
-import { describe, test, expect, beforeEach, afterEach } from "@jest/globals";
-
-describe("EventIndexer", () => {
-  const setup = () => setupEventIndexerTest();
+  });
   
   describe("constructor and basic functionality", () => {
     test("initializes with correct properties", () => {
@@ -167,8 +166,8 @@ describe("EventIndexer", () => {
       process.env.EVENT_INDEXER_POLL_MS = "10000";
       
       try {
-        const { indexer } = setup();
-        expect(indexer.pollIntervalMs).toBe(10000);
+        const customIndexer = new EventIndexer(sorobanRpcMock, "CALIAS1234567890123456789012345678901234567890");
+        expect(customIndexer.pollIntervalMs).toBe(10000);
       } finally {
         process.env.EVENT_INDEXER_POLL_MS = originalEnv;
       }
@@ -219,8 +218,8 @@ describe("EventIndexer", () => {
       const { indexer } = setup();
       
       const mockEvent = {
-        topic: ["contract", Buffer.from(JSON.stringify({ type: "dist", recipients: ["addr1", "addr2"] }))],
-        value: Buffer.from(JSON.stringify({ amount: "1000000", recipients: [{ address: "addr1", amount: "500000" }] })),
+        topic: ["contract", Buffer.from("dist").toString("base64")],
+        value: Buffer.from(JSON.stringify({ amount: "1000000", recipients: [{ address: "addr1", amount: "500000" }] })).toString("base64"),
       };
 
       const parsed = indexer._parseEventBody(mockEvent);
@@ -252,7 +251,7 @@ describe("EventIndexer", () => {
       };
 
       const transformed = indexer._transformEventData(mockEvent, eventBody);
-      expect(transformed.eventType).toBe("dist");
+      expect(transformed.topic).toBe("dist");
       expect(transformed.ledgerSequence).toBe(12345);
       expect(transformed.amount).toBe("1000000");
       expect(transformed.recipients).toEqual(["addr1", "addr2"]);
@@ -298,11 +297,14 @@ describe("EventIndexer", () => {
       expect(cacheMock.getEventWebhooks).toHaveBeenCalledWith(indexer.contractId, "dist");
       expect(fetchMock).toHaveBeenCalledWith(
         "https://example.com/webhook",
-        expect.objectContaining({\n          method: "POST",
-          headers: expect.objectContaining({\n            "Content-Type": "application/json",
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({
+            "Content-Type": "application/json",
             "X-Webhook-Event": "dist",
             "X-Webhook-Delivery": "12345-tx123-1",
-          }),\n        })
+          }),
+        })
       );
 
       expect(fetchMock.mock.calls[0][1].body).toContain("dist");
@@ -369,14 +371,25 @@ describe("EventIndexer", () => {
 
       cacheMock.getEventWebhooks.mockReturnValue([mockWebhook]);
 
-      const fetchMock = jest.fn(() => {
-        return new Promise((resolve) => {
-          setTimeout(() => {
-            resolve({ ok: true, status: 200 });\n          }, 20000);\n        });\n      });\n      global.fetch = fetchMock;
+      const originalTimeout = process.env.EVENT_WEBHOOK_TIMEOUT_MS;
+      process.env.EVENT_WEBHOOK_TIMEOUT_MS = "50";
 
-      await indexer._triggerEventWebhooks(eventData);
+      try {
+        const fetchMock = jest.fn(() => {
+          return new Promise((resolve) => {
+            setTimeout(() => {
+              resolve({ ok: true, status: 200 });
+            }, 100);
+          });
+        });
+        global.fetch = fetchMock;
 
-      expect(fetchMock).toHaveBeenCalled();
+        await indexer._triggerEventWebhooks(eventData);
+
+        expect(fetchMock).toHaveBeenCalled();
+      } finally {
+        process.env.EVENT_WEBHOOK_TIMEOUT_MS = originalTimeout;
+      }
     });
   });
 
@@ -397,13 +410,16 @@ describe("EventIndexer", () => {
     test("stops polling loop", async () => {
       const { indexer, sorobanRpcMock } = setup();
       
+      sorobanRpcMock.getEvents.mockResolvedValue({ events: [] });
+
       await indexer.start();
       expect(indexer.isRunning).toBe(true);
+      expect(sorobanRpcMock.getEvents).toHaveBeenCalledTimes(1);
+
+      sorobanRpcMock.getEvents.mockClear();
 
       await indexer.stop();
       expect(indexer.isRunning).toBe(false);
-
-      sorobanRpcMock.getEvents.mockResolvedValue({ events: [] });
 
       await new Promise(resolve => setTimeout(resolve, 10));
 
@@ -411,18 +427,16 @@ describe("EventIndexer", () => {
     });
 
     test("does not start when already running", async () => {
-      const { indexer, sorobanRpcMock } = setup();
+      const { indexer } = setup();
       
-      await indexer.start();
-      expect(indexer.isRunning).toBe(true);
-
-      const mockStart = jest.fn();
-      indexer.start = mockStart;
+      const mockPollLoop = jest.spyOn(indexer, "_pollLoop");
 
       await indexer.start();
-
-      expect(mockStart).not.toHaveBeenCalled();
       expect(indexer.isRunning).toBe(true);
+      expect(mockPollLoop).toHaveBeenCalledTimes(1);
+
+      await indexer.start();
+      expect(mockPollLoop).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -59,6 +59,9 @@ await jest.unstable_mockModule("../src/database/index.js", () => ({
   addAuditLog: jest.fn(),
   initializeDatabase: jest.fn(),
   getMigrationVersion: jest.fn(() => 1),
+  createApiKey: jest.fn(),
+  listApiKeys: jest.fn(() => []),
+  revokeApiKey: jest.fn(() => false),
 }));
 
 await jest.unstable_mockModule("../src/database/roles.js", () => ({

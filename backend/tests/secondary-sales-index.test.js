@@ -22,6 +22,7 @@ await jest.unstable_mockModule("../src/database/core.js", () => ({
     transaction: (fn) => fn,
   },
   countWrite: countWriteMock,
+  computeAuditEntryHash: jest.fn(),
 }));
 
 const { getSecondarySales, countSecondarySales } = await import(

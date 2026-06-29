@@ -39,8 +39,15 @@ const getSecondaryRoyaltyDistributions = jest.fn();
 const countSecondarySales = jest.fn();
 const initializeDatabase = jest.fn();
 const getMigrationVersion = jest.fn(() => 7);
+const addToRetryQueue = jest.fn();
+const getRetryQueueStats = jest.fn(() => ({ count: 0 }));
+const getDeadLetterQueueStats = jest.fn(() => ({ count: 0 }));
+const getDeadLetterItems = jest.fn(() => []);
 
 await jest.unstable_mockModule("../src/database/index.js", () => ({
+  db: {
+    transaction: (fn) => fn,
+  },
   getSecondarySales,
   commitSecondaryDistributionAtomic,
   applyLargestRemainder,
@@ -52,6 +59,10 @@ await jest.unstable_mockModule("../src/database/index.js", () => ({
   countSecondarySales,
   initializeDatabase,
   getMigrationVersion,
+  addToRetryQueue,
+  getRetryQueueStats,
+  getDeadLetterQueueStats,
+  getDeadLetterItems,
 }));
 
 // --- Import idempotency cache helpers and build app ----------------------
@@ -153,7 +164,7 @@ describe("POST /api/v1/secondary-royalty/distribute — idempotency (#472)", () 
       .set("Idempotency-Key", "key-error-test")
       .send(DIST_BODY);
 
-    expect(res1.status).toBe(500);
+    expect(res1.status).toBe(503);
     expect(buildTx).toHaveBeenCalledTimes(1);
 
     // Retry after fixing the transient error — must be processed fresh

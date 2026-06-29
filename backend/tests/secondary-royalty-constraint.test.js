@@ -55,6 +55,11 @@ await jest.unstable_mockModule("../src/database/index.js", () => ({
   markSalesDistributed: jest.fn(),
   recordSecondaryRoyaltyDistribution: jest.fn(),
   applyLargestRemainder: jest.fn(() => []),
+  addToRetryQueue: jest.fn(),
+  getRetryQueueStats: jest.fn(() => ({ count: 0 })),
+  getDeadLetterQueueStats: jest.fn(() => ({ count: 0 })),
+  getDeadLetterItems: jest.fn(() => []),
+  commitSecondaryDistributionAtomic: jest.fn(),
 }));
 
 const { secondaryRoyaltyRouter } = await import("../src/routes/secondary-royalty.js");

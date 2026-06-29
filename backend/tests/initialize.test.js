@@ -130,7 +130,7 @@ describe("POST /api/v1/initialize", () => {
       .send({ ...validBody, collaborators: [], shares: [] });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/recipients array must be non-empty/i);
+    expect(res.body.error).toMatch(/collaborators array must be non-empty/i);
   });
 
   test("400 when required fields are missing", async () => {

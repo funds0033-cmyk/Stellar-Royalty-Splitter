@@ -24,6 +24,7 @@ await jest.unstable_mockModule("../src/database/index.js", () => ({
   recordNonceIfNew: jest.fn(() => true),
   initializeDatabase: jest.fn(),
   getMigrationVersion: jest.fn(() => 1),
+  lookupCollaborators: jest.fn(() => []),
 }));
 
 // Import clearCache to reset between tests

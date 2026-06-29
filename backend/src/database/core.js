@@ -156,7 +156,6 @@ export function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS idx_indexed_events_event_type ON indexed_events(event_type);
       CREATE INDEX IF NOT EXISTS idx_indexed_events_timestamp ON indexed_events(timestamp);
       CREATE INDEX IF NOT EXISTS idx_indexed_events_transaction_hash ON indexed_events(transaction_hash);
-    });
   `);
 
   const migrations = [
@@ -166,7 +165,7 @@ export function initializeDatabase() {
     },
     {
       // Issue #492: RBAC roles assignment database table
-      version: 9,
+      version: 10,
       sql: `
         CREATE TABLE IF NOT EXISTS user_roles (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -178,6 +177,48 @@ export function initializeDatabase() {
           UNIQUE(contractId, walletAddress)
         );
         CREATE INDEX IF NOT EXISTS idx_user_roles_walletAddress ON user_roles(walletAddress);
+
+        -- Retry queue for failed secondary royalty distributions
+        CREATE TABLE IF NOT EXISTS secondary_royalty_retry_queue (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          contractId TEXT NOT NULL,
+          walletAddress TEXT NOT NULL,
+          tokenId TEXT NOT NULL,
+          collaborators TEXT,
+          totalRoyalties TEXT NOT NULL,
+          numberOfSales INTEGER NOT NULL,
+          pendingSaleIds TEXT NOT NULL,
+          totalDustAllocated TEXT NOT NULL DEFAULT '0',
+          dustAuditData TEXT,
+          errorMessage TEXT,
+          retryCount INTEGER NOT NULL DEFAULT 0,
+          nextRetryAt DATETIME NOT NULL,
+          createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+          lastAttemptAt DATETIME
+        );
+        CREATE INDEX IF NOT EXISTS idx_retry_queue_nextRetryAt ON secondary_royalty_retry_queue(nextRetryAt);
+        CREATE INDEX IF NOT EXISTS idx_retry_queue_contractId ON secondary_royalty_retry_queue(contractId);
+
+        -- Dead-letter queue for permanently failed secondary royalty distributions
+        CREATE TABLE IF NOT EXISTS secondary_royalty_dlq (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          contractId TEXT NOT NULL,
+          walletAddress TEXT NOT NULL,
+          tokenId TEXT NOT NULL,
+          collaborators TEXT,
+          totalRoyalties TEXT NOT NULL,
+          numberOfSales INTEGER NOT NULL,
+          pendingSaleIds TEXT NOT NULL,
+          totalDustAllocated TEXT NOT NULL DEFAULT '0',
+          dustAuditData TEXT,
+          errorMessage TEXT NOT NULL,
+          failureReason TEXT NOT NULL,
+          retryCount INTEGER NOT NULL DEFAULT 0,
+          createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+          failedAt DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_dlq_contractId ON secondary_royalty_dlq(contractId);
+        CREATE INDEX IF NOT EXISTS idx_dlq_createdAt ON secondary_royalty_dlq(createdAt);
       `,
     },
     {
@@ -304,6 +345,15 @@ export function initializeDatabase() {
         PRAGMA foreign_keys = ON;
       `,
     },
+    {
+      // Issue #461: composite index on transactions for pagination queries
+      // Accelerates getTransactionHistory() which filters by contractId and orders by timestamp DESC.
+      version: 10,
+      sql: `
+        CREATE INDEX IF NOT EXISTS idx_transactions_contractId_timestamp_desc
+          ON transactions(contractId, timestamp DESC);
+      `,
+    },
   ];
 
   const applied = db
@@ -380,6 +430,7 @@ export function initializeDatabase() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_transactions_contractId ON transactions(contractId);
+    CREATE INDEX IF NOT EXISTS idx_transactions_contractId_timestamp_desc ON transactions(contractId, timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_transactions_txHash ON transactions(txHash);
     CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
     CREATE INDEX IF NOT EXISTS idx_transactions_contract_status_timestamp_type
