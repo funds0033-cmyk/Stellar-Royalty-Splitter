@@ -326,6 +326,15 @@ export function initializeDatabase() {
         PRAGMA foreign_keys = ON;
       `,
     },
+    {
+      // Issue #461: composite index on transactions for pagination queries
+      // Accelerates getTransactionHistory() which filters by contractId and orders by timestamp DESC.
+      version: 10,
+      sql: `
+        CREATE INDEX IF NOT EXISTS idx_transactions_contractId_timestamp_desc
+          ON transactions(contractId, timestamp DESC);
+      `,
+    },
   ];
 
   const applied = db
@@ -402,6 +411,7 @@ export function initializeDatabase() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_transactions_contractId ON transactions(contractId);
+    CREATE INDEX IF NOT EXISTS idx_transactions_contractId_timestamp_desc ON transactions(contractId, timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_transactions_txHash ON transactions(txHash);
     CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
     CREATE INDEX IF NOT EXISTS idx_transactions_contract_status_timestamp_type
