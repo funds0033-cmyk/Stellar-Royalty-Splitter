@@ -9,6 +9,7 @@ await jest.unstable_mockModule("../src/stellar.js", () => ({
   retryBuildTx,
   isContractInitialized: jest.fn(),
   addressToScVal: jest.fn((a) => a),
+  bytesN32HexToScVal: jest.fn((h) => h),
   u32ToScVal: jest.fn((n) => n),
   vecToScVal: jest.fn((v) => v),
   server: {},
@@ -21,6 +22,7 @@ const addAuditLog = jest.fn();
 await jest.unstable_mockModule("../src/database/index.js", () => ({
   recordTransaction,
   addAuditLog,
+  lookupCollaborators: jest.fn(() => []),
   recordNonceIfNew: jest.fn(() => true),
   initializeDatabase: jest.fn(),
   getMigrationVersion: jest.fn(() => 1),

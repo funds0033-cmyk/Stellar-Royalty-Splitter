@@ -171,6 +171,14 @@ export interface AuditLogEntry {
   timestamp: string;
 }
 
+export interface CollaboratorSuggestion {
+  address: string;
+  label: string;
+  contractId: string | null;
+  lastSeen: string | null;
+  sources: string[];
+}
+
 export interface SecondarySale {
   id: number;
   nftId: string;
@@ -273,6 +281,11 @@ export const api = {
   getCollaborators: (contractId: string) =>
     get<{ address: string; basisPoints: number }[]>(
       `/collaborators/${contractId}`,
+    ),
+
+  lookupCollaborators: (query = "", limit = 10) =>
+    get<{ suggestions: CollaboratorSuggestion[] }>(
+      `/collaborators/lookup?q=${encodeURIComponent(query)}&limit=${limit}`,
     ),
 
   // Transaction History & Audit Log APIs
