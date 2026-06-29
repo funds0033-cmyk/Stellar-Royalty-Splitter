@@ -26,6 +26,7 @@ import { adminRouter } from "./routes/admin.js";
 import { metricsRouter } from "./routes/metrics.js";
 import { initializeSigningKey } from "./signing-key.js";
 import { verifySignedWriteRequest } from "./request-signature.js";
+import eventsRouter from "./routes/events.js";
 
 // Initialize database on startup
 initializeDatabase();
@@ -217,6 +218,7 @@ app.use("/api/v1/simulate", simulateRouter);
 app.use("/api/v1", historyRouter);
 app.use("/api/v1", webhooksRouter);
 app.use("/api/v1", analyticsRouter);
+app.use("/api/v1", eventsRouter);
 app.use("/api/v1/contract", contractRouter);
 app.use("/api/v1/health", healthRouter);
 app.use("/api/v1/admin", auditExportRouter);
@@ -270,6 +272,7 @@ server.headersTimeout = parseInt(process.env.HEADERS_TIMEOUT_MS ?? "40000");
 // #399: Initialize cache manager and admin event listener
 const contractId = getConfiguredContractId();
 let adminEventListener = null;
+let eventIndexer = null;
 
 if (contractId) {
   try {
@@ -279,18 +282,25 @@ if (contractId) {
     // Start event listener for admin transfer events
     const { getSorobanRpcClient } = await import("./stellar.js");
     const sorobanRpc = getSorobanRpcClient();
+    
+    // Start event indexer for all contract events
+    eventIndexer = new EventIndexer(sorobanRpc, contractId);
+    eventIndexer.start();
+    logger.info("[Startup] Event indexer started", { contractId });
+
+    // Start admin event listener for admin transfer events
     adminEventListener = new AdminEventListener(sorobanRpc, contractId);
     adminEventListener.start();
     logger.info("[Startup] Admin event listener started", { contractId });
   } catch (err) {
-    logger.error("[Startup] Failed to initialize cache/event listener", {
+    logger.error("[Startup] Failed to initialize cache/event indexer/listeners", {
       error: err.message,
       contractId,
     });
   }
 }
 
-// Graceful shutdown — include event listener and cache cleanup
+// Graceful shutdown — include event indexer and admin event listener and cache cleanup
 const originalShutdown = createGracefulShutdownHandler({
   server,
   closeDatabase,
@@ -299,6 +309,9 @@ const originalShutdown = createGracefulShutdownHandler({
 
 const handleShutdown = (signal) => {
   logger.info(`[Shutdown] ${signal} received, cleaning up...`);
+  if (eventIndexer) {
+    eventIndexer.stop();
+  }
   if (adminEventListener) {
     adminEventListener.stop();
   }
