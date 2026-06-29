@@ -15,6 +15,13 @@ const stellarSdkMock = {
     setTimeout: jest.fn().mockReturnThis(),
     build: jest.fn().mockReturnValue({}),
   })),
+  Transaction: jest.fn(() => ({
+    source: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    fee: "250",
+    sequence: "123456789",
+    operations: [{ type: "operation" }],
+    timeBounds: { minTime: "0", maxTime: "30" },
+  })),
   BASE_FEE: "100",
   Account: jest.fn(),
   scValToNative: jest.fn((value) => value),
