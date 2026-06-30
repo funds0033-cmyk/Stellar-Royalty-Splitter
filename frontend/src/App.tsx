@@ -1,7 +1,13 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Navigation } from "./components/Navigation";
 import HelpModal from "./components/HelpModal";
+import { OfflineIndicator } from "./components/OfflineIndicator";
 import { useTheme } from "./context/ThemeContext";
+import {
+  useKeyboardShortcuts,
+  type Shortcut,
+} from "./hooks/useKeyboardShortcuts";
+import { analytics } from "./lib/analytics";
 
 import { Dashboard } from "./components/Dashboard";
 import { AdminDashboard } from "./components/AdminDashboard";
@@ -57,6 +63,10 @@ export default function App() {
   function handlePageChange(page: string) {
     localStorage.setItem("srs_currentPage", page);
     setCurrentPage(page);
+    // #524 — page_view is the canonical navigation analytics event. Page
+    // name is enumerated (no PII) and the analytics tracker scrubs any
+    // address-like value defensively even if a future page name leaks one.
+    analytics.dispatch("page_view", { page });
   }
 
   function clearSavedContract() {
@@ -170,18 +180,73 @@ export default function App() {
     setShowHelp(false);
   }
 
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      const tag = (e.target as HTMLElement).tagName;
-      const typing = tag === "INPUT" || tag === "TEXTAREA";
-      if (e.key === "?" && !typing) { setShowHelp(true); return; }
-      if (e.key === "Escape") { setShowHelp(false); return; }
-      if (e.ctrlKey && e.key === "k") { e.preventDefault(); contractInputRef.current?.focus(); return; }
-      if (e.ctrlKey && e.key === "d") { e.preventDefault(); toggleTheme(); return; }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [toggleTheme]);
+  // #518 — power-user keyboard shortcuts. Declared once and registered via
+  // the shared hook so the help modal renders the same combos the handlers
+  // actually respond to (no drift between docs and behavior).
+  const shortcuts = useMemo<Shortcut[]>(
+    () => [
+      {
+        id: "search",
+        key: "k",
+        ctrl: true,
+        description: "Focus contract ID input",
+        handler: () => contractInputRef.current?.focus(),
+      },
+      {
+        id: "submit",
+        key: "Enter",
+        ctrl: true,
+        description: "Submit / confirm the current form",
+        handler: () => {
+          // Dispatch a synthetic submit on the focused form so individual
+          // form components don't need to know about the shortcut.
+          const active = document.activeElement;
+          const form =
+            active instanceof HTMLElement ? active.closest("form") : null;
+          if (form) form.requestSubmit?.();
+        },
+      },
+      {
+        id: "save",
+        key: "s",
+        ctrl: true,
+        description: "Persist the current contract ID as default",
+        handler: () => {
+          if (contractId) {
+            localStorage.setItem("lastContractId", contractId);
+          }
+        },
+      },
+      {
+        id: "theme",
+        key: "d",
+        ctrl: true,
+        description: "Toggle light / dark theme",
+        handler: () => toggleTheme(),
+      },
+      {
+        id: "help",
+        key: "?",
+        // `?` can fire from `Shift+/` without our shortcut hook needing to
+        // know — `allowInInput=false` is enough since the help modal is
+        // a top-level concern.
+        description: "Open the help / shortcuts modal",
+        handler: () => {
+          analytics.dispatch("help_opened", { source: "shortcut" });
+          setShowHelp(true);
+        },
+      },
+      {
+        id: "close-modal",
+        key: "Escape",
+        allowInInput: true,
+        description: "Close any open modal",
+        handler: () => setShowHelp(false),
+      },
+    ],
+    [contractId, toggleTheme],
+  );
+  useKeyboardShortcuts(shortcuts);
 
   function handleDisconnect() {
     // Clear all wallet state and any cached wallet data from localStorage
@@ -318,7 +383,8 @@ export default function App() {
 
   return (
     <div className="app-wrapper">
-      {showHelp && <HelpModal onClose={closeHelp} />}
+      <OfflineIndicator />
+      {showHelp && <HelpModal onClose={closeHelp} shortcuts={shortcuts} />}
       {sessionToast && (
         <div className="session-toast" role="alert" aria-live="assertive">
           <span>{sessionToast}</span>
