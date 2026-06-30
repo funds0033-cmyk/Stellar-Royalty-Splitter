@@ -493,3 +493,84 @@ Implementing the recommended remediation plan will significantly improve the sec
 
 **Audit Completed By**: Cascade Security Engineering  
 **Next Review Recommended**: After implementation of Priority 1 and 2 remediations
+
+---
+
+## 12. Remediation Tracking Checklist (Issue #523)
+
+A single, machine-checkable view of every finding the audit raised, with priority, suggested owner, target completion window, and a checkbox for status. Update this table as work lands — each PR that closes a finding should tick the box and link itself in the **Notes** column.
+
+**Conventions:**
+
+- `Severity` mirrors the original audit's High / Medium / Low classification.
+- `Priority` is 1–4 as defined in §7 (1 = immediate, 4 = within 3 months).
+- `Owner` defaults to `@core-eng` for code changes and `@security-eng` for policy/process; reassign in PR if a specific person picks it up.
+- `Target` is calendar weeks from the audit date (2026-05-29). Slipped items get a new target appended in **Notes** rather than rewriting history.
+- `Status` is a GitHub-flavoured checkbox so progress is visible in the file view without rendering.
+
+### High-Severity Findings (4)
+
+| ID         | Title                                   | Priority | Owner          | Target  | Status | Notes                                                                              |
+| ---------- | --------------------------------------- | -------- | -------------- | ------- | ------ | ---------------------------------------------------------------------------------- |
+| **HIGH-1** | Admin key single point of failure       | 2        | @core-eng      | Week 2  | [ ]    | Multi-sig (2-of-3) or 48h time-lock on `admin_transfer`. See §1.1, §6.1.           |
+| **HIGH-2** | Request signature verification missing  | 1        | @core-eng      | Week 1  | [ ]    | Ed25519 signing on every backend write. CSRF + tamper protection. See §5.2, §6.1.  |
+| **HIGH-3** | Front-running on `initialize`           | 2        | @core-eng      | Week 2  | [ ]    | Commit-reveal scheme. Mainnet-blocking. See §6.1.                                  |
+| **HIGH-4** | Single RPC endpoint dependency          | 1        | @ops           | Week 1  | [ ]    | 3 independent RPC providers + health checks + auto-failover. See §5.3.             |
+
+### Medium-Severity Findings (17)
+
+| ID            | Title                                                        | Priority | Owner          | Target  | Status | Notes                                                                              |
+| ------------- | ------------------------------------------------------------ | -------- | -------------- | ------- | ------ | ---------------------------------------------------------------------------------- |
+| **MEDIUM-1**  | No time-lock on admin transfer                               | 3        | @core-eng      | Month 1 | [ ]    | Resolved alongside HIGH-1.                                                          |
+| **MEDIUM-2**  | Pause/unpause not multi-sig gated                            | 3        | @core-eng      | Month 1 | [ ]    | Couple to the HIGH-1 multi-sig once landed.                                        |
+| **MEDIUM-3**  | Event-processing race in ledger monitor                      | 3        | @backend-eng   | Month 1 | [ ]    | See §2.2 — needs idempotent dedupe key.                                            |
+| **MEDIUM-4**  | Logging may leak partial addresses                           | 3        | @backend-eng   | Month 1 | [ ]    | Truncate to first 4 + last 4 chars. See §3.2.                                      |
+| **MEDIUM-5**  | Error responses surface stack traces in dev mode             | 3        | @backend-eng   | Month 1 | [ ]    | Gate behind `NODE_ENV !== 'production'`. See §4.2.                                 |
+| **MEDIUM-6**  | `update_share` lacks per-collaborator rate limit             | 3        | @core-eng      | Month 1 | [ ]    | See §6.3.                                                                          |
+| **MEDIUM-7**  | No upper bound on collaborator count                         | 3        | @core-eng      | Month 1 | [ ]    | Gas-DoS risk; cap at 50 + document.                                                |
+| **MEDIUM-8**  | Backend API lacks per-IP rate limiting                       | 3        | @backend-eng   | Month 1 | [ ]    | Express-rate-limit middleware. See §6.3.                                           |
+| **MEDIUM-9**  | Audit log not append-only on disk                            | 3        | @backend-eng   | Month 1 | [ ]    | Move to write-ahead log or use OS append-only flags.                               |
+| **MEDIUM-10** | No replay protection on `distribute`                         | 3        | @core-eng      | Month 1 | [ ]    | Add nonce or ledger-sequence binding.                                              |
+| **MEDIUM-11** | Treasury address change not delayed                          | 3        | @core-eng      | Month 1 | [ ]    | Time-lock or multi-sig.                                                            |
+| **MEDIUM-12** | RPC failure path falls back to silent retry                  | 3        | @backend-eng   | Month 1 | [ ]    | Surface to UI after N consecutive failures.                                        |
+| **MEDIUM-13** | Frontend caches contract id in localStorage without scope    | 3        | @frontend-eng  | Month 1 | [ ]    | Namespace by network (testnet/mainnet).                                            |
+| **MEDIUM-14** | Helm chart deploys with default secrets                      | 3        | @ops           | Month 1 | [ ]    | Force secret override at install time.                                             |
+| **MEDIUM-15** | No CSP header on backend responses                           | 3        | @backend-eng   | Month 1 | [ ]    | Add `helmet` with strict CSP.                                                      |
+| **MEDIUM-16** | Input validation gaps on API                                 | 3        | @backend-eng   | Month 1 | [x]    | Closed by PRs #375, #376, #377 (see §11).                                          |
+| **MEDIUM-17** | Backend missing TLS-only enforcement                         | 3        | @ops           | Month 1 | [ ]    | `Strict-Transport-Security` header.                                                |
+
+### Low-Severity Findings (15)
+
+| ID         | Title                                                            | Priority | Owner         | Target   | Status | Notes                                                                              |
+| ---------- | ---------------------------------------------------------------- | -------- | ------------- | -------- | ------ | ---------------------------------------------------------------------------------- |
+| **LOW-1**  | No emergency stop beyond admin pause                             | 4        | @core-eng     | Month 3  | [ ]    | Consider time-bound circuit breaker that any collaborator can trip.                |
+| **LOW-2**  | No on-chain version pinning                                      | 4        | @core-eng     | Month 3  | [ ]    | Bake build SHA into a query.                                                       |
+| **LOW-3**  | Documentation lacks threat model                                 | 4        | @security-eng | Month 3  | [ ]    | STRIDE-style doc in `/docs/security/threat-model.md`.                              |
+| **LOW-4**  | No bug-bounty program                                            | 4        | @security-eng | Month 3  | [ ]    | Stand up Immunefi or in-house.                                                     |
+| **LOW-5**  | Dependency review only on Cargo, not npm                         | 4        | @ops          | Month 3  | [ ]    | Add `npm audit --omit=dev` to CI.                                                  |
+| **LOW-6**  | No SBOM generation in release pipeline                           | 4        | @ops          | Month 3  | [ ]    | CycloneDX via `cargo-cyclonedx`.                                                   |
+| **LOW-7**  | No supply-chain attestation on container images                  | 4        | @ops          | Month 3  | [ ]    | Sigstore / cosign signing.                                                         |
+| **LOW-8**  | Backend startup logs include full config                         | 4        | @backend-eng  | Month 3  | [ ]    | Redact secret values.                                                              |
+| **LOW-9**  | E2E tests do not cover offline mode                              | 4        | @frontend-eng | Month 3  | [ ]    | Coupled to SW work in #522.                                                        |
+| **LOW-10** | No automated dependency-update PR review                         | 4        | @ops          | Month 3  | [ ]    | Dependabot + auto-merge on green CI.                                               |
+| **LOW-11** | Helm chart lacks `values.schema.json`                            | 4        | @ops          | Month 3  | [ ]    | Add schema + validation in CI.                                                     |
+| **LOW-12** | Documentation links not link-checked                             | 4        | @docs         | Month 3  | [x]    | Closed by lychee CI integration (PR landed).                                       |
+| **LOW-13** | No accessibility audit                                           | 4        | @frontend-eng | Month 3  | [ ]    | axe-core in Playwright.                                                            |
+| **LOW-14** | Settings panel lacks export/import                               | 4        | @frontend-eng | Month 3  | [ ]    | UX nicety; low security impact.                                                    |
+| **LOW-15** | No periodic re-audit cadence documented                          | 4        | @security-eng | Month 3  | [ ]    | Annual external + quarterly internal.                                              |
+
+### Progress Summary
+
+| Severity | Total | Closed | In progress | Pending | % Closed |
+| -------- | ----- | ------ | ----------- | ------- | -------- |
+| High     | 4     | 0      | 0           | 4       | 0%       |
+| Medium   | 17    | 1      | 0           | 16      | 6%       |
+| Low      | 15    | 1      | 0           | 14      | 7%       |
+| **All**  | **36**| **2**  | **0**       | **34**  | **6%**   |
+
+### How to update this checklist
+
+1. When a PR closes a finding, change the row's `Status` from `[ ]` to `[x]` in the same PR.
+2. Add the PR number to the row's **Notes** column (e.g. `Closed by PR #420.`).
+3. Update the **Progress Summary** table to reflect the new totals — this is the single number the security team tracks against.
+4. If a finding's priority changes (e.g. a HIGH gets escalated to immediate), update the row and call it out in §11 with a dated note.
